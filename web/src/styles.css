@@ -1,0 +1,50 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --color-ground: #e9edf4;
+  --color-paper: #ffffff;
+  --color-ink: #17203a;
+  --color-muted: #5b6684;
+  --color-rule: #cdd4e2;
+  --color-cobalt: #2747d6;
+  --color-cobalt-soft: #dfe5fb;
+  --color-pass: #0f7a52;
+  --color-wait: #a86200;
+  --color-fail: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-ground: #10162a;
+    --color-paper: #19223b;
+    --color-ink: #e6eaf5;
+    --color-muted: #9aa5c4;
+    --color-rule: #2c3858;
+    --color-cobalt: #7d95ff;
+    --color-cobalt-soft: #222f5c;
+    --color-pass: #4fd39a;
+    --color-wait: #f0b056;
+    --color-fail: #ff8a80;
+  }
+}
+
+html { background: var(--color-ground); color: var(--color-ink); }
+body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+
+.hex { font-family: var(--font-mono); font-size: 0.78rem; overflow-wrap: anywhere; }
+
+/* Ticket edge between the result and its derivation */
+.perforation {
+  height: 14px;
+  background: radial-gradient(circle at 7px 7px, var(--color-ground) 5px, transparent 5.5px) 0 0 / 18px 14px repeat-x;
+}
+
+:focus-visible { outline: 2px solid var(--color-cobalt); outline-offset: 2px; }
+
+@keyframes land { from { transform: translateY(-0.25em) scale(0.92); opacity: 0; } to { transform: none; opacity: 1; } }
+.land { animation: land 420ms cubic-bezier(.2,.9,.3,1.2) both; }
+@keyframes breathe { 50% { opacity: 0.35; } }
+.breathe { animation: breathe 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .land, .breathe { animation: none; } }

@@ -1,0 +1,28 @@
+{
+  "name": "arc-vrf-playground",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "abi": "echo \"export const playgroundAbi = $(forge inspect --root ../contracts PlaygroundDirect abi --json) as const\" > src/abi.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.108.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "viem": "^2.58.4",
+    "wagmi": "^2.19.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.8"
+  }
+}
