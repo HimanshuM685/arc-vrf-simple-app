@@ -7,7 +7,7 @@ A small example dApp that shows what you can build with [Arc VRF](https://arcvrf
 | Random number | 1 | `min + word mod (max - min + 1)` |
 | Dice (1–10 dice, d4–d100) | one per die | `word[i] mod sides + 1` |
 | Coin flip | 1 | even word = heads; your call is locked in with the request |
-| Higher or lower | 1 | next card `word mod 13 + 1` against your stored card; one open round per player |
+| Higher or lower | 1 | next card `word mod 13 + 1` against your stored card; one open round per player, which you can give up if no answer lands within ~1 hour |
 | Raffle | 1 | partial Fisher–Yates over the entries; only the list hash goes on-chain, before the draw |
 
 Each result opens as a receipt that shows the random words and the math that produced the result. **Verify on-chain** then rebuilds the whole chain of evidence from raw Arc Testnet data in your browser:

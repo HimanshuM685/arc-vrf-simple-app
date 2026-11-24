@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "abi": "echo \"export const playgroundAbi = $(forge inspect --root ../contracts PlaygroundDirect abi --json) as const\" > src/abi.ts"
+    "abi": "echo \"export const playgroundAbi = $(forge inspect --root ../contracts PlaygroundDirect abi --json) as const\" > src/abi.ts",
+    "start": "vite preview --host 0.0.0.0 --port ${PORT:-4173}"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.108.2",

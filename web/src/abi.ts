@@ -29,6 +29,19 @@ export const playgroundAbi = [
   },
   {
     "type": "function",
+    "name": "HILO_TIMEOUT_BLOCKS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MAX_DICE",
     "inputs": [],
     "outputs": [
@@ -65,6 +78,13 @@ export const playgroundAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "abandonHiLo",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -209,6 +229,30 @@ export const playgroundAbi = [
             "internalType": "uint256[]"
           }
         ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "hiloRounds",
+    "inputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "requestId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "openedAt",
+        "type": "uint64",
+        "internalType": "uint64"
       }
     ],
     "stateMutability": "view"
@@ -442,6 +486,25 @@ export const playgroundAbi = [
   },
   {
     "type": "event",
+    "name": "HiLoAbandoned",
+    "inputs": [
+      {
+        "name": "requestId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "player",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Requested",
     "inputs": [
       {
@@ -527,6 +590,11 @@ export const playgroundAbi = [
   {
     "type": "error",
     "name": "BadRange",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "HiLoNotAbandonable",
     "inputs": []
   },
   {

@@ -19,7 +19,7 @@ import type { Round } from './play'
 // Arc VRF coordinator ABI fragments (same shapes as Chainlink VRF v2.5).
 const PROOF = '(uint256[2] pk, uint256[2] gamma, uint256 c, uint256 s, uint256 seed, address uWitness, uint256[2] cGammaWitness, uint256[2] sHashWitness, uint256 zInv)'
 const RC = '(uint64 blockNum, uint256 subId, uint32 callbackGasLimit, uint32 numWords, address sender, bytes extraArgs)'
-const coordinatorAbi = parseAbi([
+export const coordinatorAbi = parseAbi([
   'event RandomWordsRequested(bytes32 indexed keyHash, uint256 requestId, uint256 preSeed, uint256 indexed subId, uint16 minimumRequestConfirmations, uint32 callbackGasLimit, uint32 numWords, bytes extraArgs, address indexed sender)',
   'event RandomWordsFulfilled(uint256 indexed requestId, uint256 outputSeed, uint256 indexed subId, uint96 payment, bool nativePayment, bool success, bool onlyPremium)',
   `function fulfillRandomWords(${PROOF} proof, ${RC} rc, bool onlyPremium)`,
@@ -147,15 +147,18 @@ export async function verifyRound(round: Round): Promise<Check[]> {
   })
 
   // 6. Game result: the contract's view against the math run in this browser.
-  const onchain = await client.readContract({ address: round.contract, abi: playgroundAbi, functionName: 'resultOf', args: [id] })
-  const local = derive(round.game, round.a, round.b, words, round.names)
+  // Inputs come from the contract's stored request, not from the UI.
+  const [onchain, r] = await Promise.all([
+    client.readContract({ address: round.contract, abi: playgroundAbi, functionName: 'resultOf', args: [id] }),
+    client.readContract({ address: round.contract, abi: playgroundAbi, functionName: 'getRequest', args: [id] }),
+  ])
+  const local = derive(round.game, r.a, r.b, words, round.names)
   const values = [
     { label: 'contract resultOf', value: onchain.join(', ') },
     { label: 'recomputed here', value: local.result.join(', ') },
   ]
   let ok = onchain.length === local.result.length && onchain.every((v, i) => v === local.result[i])
   if (round.game === 'Raffle' && round.names) {
-    const r = await client.readContract({ address: round.contract, abi: playgroundAbi, functionName: 'getRequest', args: [id] })
     const listHash = keccak256(toBytes(round.names.join('\n')))
     values.push({ label: 'entry list hash', value: listHash }, { label: 'committed on-chain', value: r.commit })
     ok = ok && listHash === (r.commit as Hex)

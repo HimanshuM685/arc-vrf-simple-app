@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react'
-import { parseEventLogs, BaseError, type Address, type Hash } from 'viem'
+import { parseEventLogs, BaseError, isAddressEqual, type Address, type Hash } from 'viem'
 import { estimateFeesPerGas, getPublicClient, readContract, waitForTransactionReceipt, writeContract } from 'wagmi/actions'
 import { playgroundAbi } from '../abi'
-import { MIN_MAX_FEE, PLAYGROUND, wagmiConfig, type Mode } from './config'
+import { MIN_MAX_FEE, PLAYGROUND, VRF, wagmiConfig, type Mode } from './config'
 import { gameIndex, type GameName } from './games'
+import { coordinatorAbi } from './verify'
 
 type GameFn = 'requestNumber' | 'rollDice' | 'flipCoin' | 'playHiLo' | 'drawWinners'
 
@@ -84,24 +85,44 @@ export function useRounds() {
       })
       const receipt = await waitForTransactionReceipt(wagmiConfig, { hash })
       if (receipt.status !== 'success') throw new Error('Request transaction reverted')
-      const [ev] = parseEventLogs({ abi: playgroundAbi, logs: receipt.logs, eventName: 'Requested' })
+      const ev = parseEventLogs({ abi: playgroundAbi, logs: receipt.logs, eventName: 'Requested' }).find((l) =>
+        isAddressEqual(l.address, contract),
+      )
+      if (!ev) throw new Error('No Requested event in the request transaction')
       const requestId = ev.args.requestId
-      patch(key, { status: 'requested', requestId, requestTx: hash, requestBlock: receipt.blockNumber, fee: value })
+      // Use the inputs the contract stored (e.g. the HiLo card), not what the form showed.
+      patch(key, { status: 'requested', requestId, requestTx: hash, requestBlock: receipt.blockNumber, fee: value, a: ev.args.a, b: ev.args.b })
 
       // 2. Wait for the Arc VRF node. The answer arrives in a separate transaction, usually within seconds.
+      // The coordinator's RandomWordsFulfilled marks the answer: it carries the fulfilment tx, and if the
+      // playground is still unsettled at that block, the callback failed and nothing more will come.
       const client = getPublicClient(wagmiConfig)!
       for (let i = 0; ; i++) {
-        const r = await client.readContract({ address: contract, abi: playgroundAbi, functionName: 'getRequest', args: [requestId] })
-        if (r.settled) {
-          const logs = await client.getContractEvents({
-            address: contract,
-            abi: playgroundAbi,
-            eventName: 'Settled',
-            args: { requestId },
-            fromBlock: receipt.blockNumber,
-          })
-          patch(key, { status: 'settled', words: r.words, fulfillTx: logs[0]?.transactionHash, settledAt: Date.now() })
-          return
+        try {
+          const r = await client.readContract({ address: contract, abi: playgroundAbi, functionName: 'getRequest', args: [requestId] })
+          if (r.settled || i % 5 === 4) {
+            const [answer] = await client.getContractEvents({
+              address: VRF.coordinator,
+              abi: coordinatorAbi,
+              eventName: 'RandomWordsFulfilled',
+              args: { requestId },
+              fromBlock: receipt.blockNumber,
+            })
+            if (answer) {
+              // Read at the answer's block so a lagging RPC node can't report a false failure.
+              const s = r.settled
+                ? r
+                : await client.readContract({ address: contract, abi: playgroundAbi, functionName: 'getRequest', args: [requestId], blockNumber: answer.blockNumber })
+              if (!s.settled) {
+                patch(key, { status: 'failed', error: 'The answer arrived but the playground callback did not store it. A request is answered once and never retried.', fulfillTx: answer.transactionHash })
+              } else {
+                patch(key, { status: 'settled', words: s.words, fulfillTx: answer.transactionHash, settledAt: Date.now() })
+              }
+              return
+            }
+          }
+        } catch {
+          // A flaky RPC call is not a failed round: the answer is still coming, so keep waiting.
         }
         // Never re-request: a slow answer is still coming. Just keep waiting.
         await sleep(i < 15 ? 2000 : 6000)

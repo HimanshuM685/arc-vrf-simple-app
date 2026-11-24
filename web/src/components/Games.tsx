@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { keccak256, toBytes } from 'viem'
-import { useAccount, useReadContract } from 'wagmi'
+import { useAccount, useBlockNumber, useReadContract, useWriteContract } from 'wagmi'
 import { playgroundAbi } from '../abi'
 import { PLAYGROUND, type Mode } from '../lib/config'
 import { CARD, type GameName } from '../lib/games'
-import type { PlayArgs } from '../lib/play'
+import { errorText, type PlayArgs } from '../lib/play'
 import { Funding } from './Funding'
 import { Card } from './Receipt'
 
@@ -104,7 +104,12 @@ export function HiLoGame({ mode, play, disabled }: Props) {
           {stats && <p>Streak {stats.hiloStreak}, best {stats.hiloBest}</p>}
         </div>
       </div>
-      {pending && <p className="text-wait">A round is still waiting for its answer. New rounds unlock when it lands.</p>}
+      {pending && (
+        <div className="space-y-2">
+          <p className="text-wait">A round is still waiting for its answer. New rounds unlock when it lands.</p>
+          <AbandonHiLo mode={mode} />
+        </div>
+      )}
       <div className="flex flex-wrap gap-3">
         <button className={btn} disabled={disabled || pending || card === 13} onClick={() => go(true)}>Higher</button>
         <button className={btn} disabled={disabled || pending || card === 1} onClick={() => go(false)}>Lower</button>
@@ -135,6 +140,40 @@ export function RaffleGame({ mode, play, disabled }: Props) {
         Draw {winners} winner{winners > 1 ? 's' : ''}
       </button>
     </Shell>
+  )
+}
+
+/** Mirrors PlaygroundGames.HILO_TIMEOUT_BLOCKS. */
+const HILO_TIMEOUT_BLOCKS = 7200n
+
+/** Escape hatch for a round whose answer never lands (failed callback, cancelled subscription). */
+function AbandonHiLo({ mode }: { mode: Mode }) {
+  const { address } = useAccount()
+  const { data: round } = useReadContract({
+    address: PLAYGROUND[mode],
+    abi: playgroundAbi,
+    functionName: 'hiloRounds',
+    args: [address!],
+    query: { enabled: !!address && !!PLAYGROUND[mode], refetchInterval: 10_000 },
+  })
+  const { data: block } = useBlockNumber({ query: { refetchInterval: 10_000 } })
+  const { writeContract, isPending, error } = useWriteContract()
+  const unlockAt = round ? round[1] + HILO_TIMEOUT_BLOCKS : undefined
+  const ready = unlockAt !== undefined && block !== undefined && block >= unlockAt
+  return (
+    <div className="text-sm text-muted">
+      <button
+        className="rounded-full border border-rule px-4 py-1.5 font-semibold hover:border-ink disabled:cursor-not-allowed disabled:opacity-40"
+        disabled={!ready || isPending}
+        onClick={() => writeContract({ address: PLAYGROUND[mode]!, abi: playgroundAbi, functionName: 'abandonHiLo' })}
+      >
+        Give up this round
+      </button>
+      <span className="ml-3">
+        {ready ? 'Your card and streak stay as they are.' : 'Available if no answer comes within about an hour.'}
+      </span>
+      {error && <p className="mt-1 text-fail">{errorText(error)}</p>}
+    </div>
   )
 }
 
