@@ -42,22 +42,32 @@ abstract contract PlaygroundGames {
     bool hiloPending;
   }
 
+  /// Open HiLo round, so a round whose answer never lands can be given up after a timeout.
+  struct HiLoRound {
+    uint256 requestId;
+    uint64 openedAt; // block number
+  }
+
   uint8 public constant HILO_START_CARD = 7;
+  uint64 public constant HILO_TIMEOUT_BLOCKS = 7200; // about an hour at Arc's ~0.5 s blocks
   uint32 public constant MAX_DICE = 10; // direct funding allows at most 10 words per request
   uint32 public constant MAX_RAFFLE_ENTRIES = 1000;
   uint32 public constant MAX_RAFFLE_WINNERS = 20;
 
   mapping(uint256 requestId => Request) internal s_requests;
   mapping(address player => Player) public players;
+  mapping(address player => HiLoRound) public hiloRounds;
   uint256[] public allRequestIds;
 
   event Requested(uint256 indexed requestId, address indexed player, Game game, uint64 a, uint64 b, bytes32 commit);
   event Settled(uint256 indexed requestId, address indexed player, Game game, uint256[] words);
+  event HiLoAbandoned(uint256 indexed requestId, address indexed player);
 
   error BadRange();
   error BadDice();
   error BadRaffle();
   error HiLoRoundPending();
+  error HiLoNotAbandonable();
   error RefundFailed();
 
   // ---------------------------------------------------------------- funding hook
@@ -90,9 +100,24 @@ abstract contract PlaygroundGames {
   function playHiLo(bool guessHigher) external payable returns (uint256) {
     Player storage p = players[msg.sender];
     if (p.hiloPending) revert HiLoRoundPending();
-    p.hiloPending = true; // set before the external call so a reentrant play cannot slip in
+    // Set before the external calls so a reentrant play or abandon cannot slip in.
+    p.hiloPending = true;
+    hiloRounds[msg.sender].openedAt = uint64(block.number);
     uint8 card = p.hiloCard == 0 ? HILO_START_CARD : p.hiloCard;
-    return _request(Game.HiLo, 1, guessHigher ? 1 : 0, card, 0);
+    uint256 requestId = _request(Game.HiLo, 1, guessHigher ? 1 : 0, card, 0);
+    hiloRounds[msg.sender].requestId = requestId;
+    return requestId;
+  }
+
+  /// @notice Give up a HiLo round whose answer has not landed after HILO_TIMEOUT_BLOCKS, so a lost
+  /// or failed callback cannot lock you out. Your card and streak stay as they were. If the answer
+  /// arrives later it is still stored, but it no longer moves your card or streak.
+  function abandonHiLo() external {
+    Player storage p = players[msg.sender];
+    HiLoRound memory round = hiloRounds[msg.sender];
+    if (!p.hiloPending || block.number < round.openedAt + HILO_TIMEOUT_BLOCKS) revert HiLoNotAbandonable();
+    p.hiloPending = false;
+    emit HiLoAbandoned(round.requestId, msg.sender);
   }
 
   /// @notice Draw `winners` distinct entries out of `entries`. The list itself stays off-chain;
@@ -147,18 +172,21 @@ abstract contract PlaygroundGames {
       if ((words[0] % 2 == 0) == (r.a == 1)) p.coinWins++;
     } else if (r.game == Game.HiLo) {
       Player storage p = players[r.player];
-      uint8 next = uint8(words[0] % 13) + 1;
-      if (next != r.b) {
-        bool won = (r.a == 1) == (next > r.b);
-        if (won) {
-          p.hiloStreak++;
-          if (p.hiloStreak > p.hiloBest) p.hiloBest = p.hiloStreak;
-        } else {
-          p.hiloStreak = 0;
+      // Only the player's open round moves their card; a late answer to an abandoned round doesn't.
+      if (p.hiloPending && hiloRounds[r.player].requestId == requestId) {
+        uint8 next = uint8(words[0] % 13) + 1;
+        if (next != r.b) {
+          bool won = (r.a == 1) == (next > r.b);
+          if (won) {
+            p.hiloStreak++;
+            if (p.hiloStreak > p.hiloBest) p.hiloBest = p.hiloStreak;
+          } else {
+            p.hiloStreak = 0;
+          }
         }
+        p.hiloCard = next;
+        p.hiloPending = false;
       }
-      p.hiloCard = next;
-      p.hiloPending = false;
     }
     emit Settled(requestId, r.player, r.game, words);
   }

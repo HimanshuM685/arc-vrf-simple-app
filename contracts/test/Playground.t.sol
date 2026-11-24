@@ -146,6 +146,35 @@ contract PlaygroundTest is Test {
     assertEq(best, 1);
   }
 
+  function test_hilo_abandonAfterTimeoutIgnoresLateAnswer() public {
+    vm.startPrank(alice);
+    uint256 lost = direct.playHiLo{value: 0.001 ether}(true); // from card 7, answer never comes in time
+    vm.expectRevert(PlaygroundGames.HiLoNotAbandonable.selector);
+    direct.abandonHiLo();
+
+    vm.roll(block.number + direct.HILO_TIMEOUT_BLOCKS());
+    direct.abandonHiLo();
+    (,,, uint8 card,,, bool pending) = direct.players(alice);
+    assertEq(card, 0);
+    assertFalse(pending);
+    vm.expectRevert(PlaygroundGames.HiLoNotAbandonable.selector);
+    direct.abandonHiLo(); // nothing open any more
+
+    uint256 next = direct.playHiLo{value: 0.001 ether}(true); // unlocked: a new round opens
+    vm.stopPrank();
+
+    vrf.fulfill(lost, _words(9)); // late answer to the abandoned round: stored, but moves nothing
+    assertTrue(direct.getRequest(lost).settled);
+    (,,, card,,, pending) = direct.players(alice);
+    assertEq(card, 0);
+    assertTrue(pending);
+
+    vrf.fulfill(next, _words(9)); // the open round settles normally: 10 > 7, win
+    (,,, card,,, pending) = direct.players(alice);
+    assertEq(card, 10);
+    assertFalse(pending);
+  }
+
   function test_raffle_uniqueWinnersInRange() public {
     vm.prank(alice);
     uint256 id = direct.drawWinners{value: 0.001 ether}(50, 20, keccak256("list"));
